@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0b0b0c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Bunker Prompter</title>
+<style>
+:root{--bg:#0b0b0c;--fg:#f4f1ea;--acc:#ff6a1a;--mut:#8a867e;--card:#17171a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+button{font:inherit;color:inherit;border:0;cursor:pointer}
+.hidden{display:none!important}
+
+/* ===== Editor ===== */
+#editor{position:fixed;inset:0;display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 14px);gap:12px;overflow:auto}
+#editor h1{margin:0;font-size:20px;letter-spacing:.02em}
+#editor h1 b{color:var(--acc)}
+#script{flex:1;min-height:200px;width:100%;resize:none;background:var(--card);color:var(--fg);border:1px solid #2a2a2e;border-radius:14px;padding:14px;font-size:17px;line-height:1.5;outline:none}
+#script:focus{border-color:var(--acc)}
+.meta{font-size:13px;color:var(--mut)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.seg{display:flex;background:var(--card);border-radius:12px;padding:3px}
+.seg button{padding:9px 12px;border-radius:9px;background:transparent;font-size:14px;color:var(--mut)}
+.seg button.on{background:#2a2a2e;color:var(--fg)}
+.go{width:100%;padding:16px;border-radius:14px;background:var(--acc);color:#111;font-weight:700;font-size:17px}
+
+/* ===== Studio ===== */
+#studio{position:fixed;inset:0;background:#000}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#cam.mirror{transform:scaleX(-1)}
+#frame{position:absolute;inset:0;pointer-events:none}
+#frame .mask{position:absolute;background:rgba(0,0,0,.65)}
+#prompt{position:absolute;left:0;right:0;top:0;overflow:hidden;
+  -webkit-mask-image:linear-gradient(#0000,#000 12%,#000 80%,#0000);mask-image:linear-gradient(#0000,#000 12%,#000 80%,#0000)}
+#prompt.bg{background:rgba(0,0,0,.45)}
+#text{position:absolute;left:0;right:0;margin:0 auto;padding:0 6%;font-weight:700;line-height:1.35;text-shadow:0 2px 6px #000,0 0 2px #000;white-space:pre-wrap;will-change:transform}
+#text.flip{transform-origin:center}
+#guide{position:absolute;left:0;right:0;height:0;border-top:2px solid rgba(255,106,26,.75);pointer-events:none}
+#guide::before{content:"";position:absolute;left:6px;top:-8px;border:7px solid transparent;border-left:10px solid var(--acc)}
+
+#count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30vmin;font-weight:800;color:#fff;text-shadow:0 4px 30px #000;pointer-events:none}
+#rec{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:12px;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.55);padding:6px 10px;border-radius:20px;font-size:14px;font-variant-numeric:tabular-nums;z-index:5}
+#rec i{width:10px;height:10px;border-radius:50%;background:#ff3b30;animation:bl 1s infinite}
+@keyframes bl{50%{opacity:.25}}
+
+#bar{position:absolute;left:0;right:0;bottom:0;padding:10px 12px calc(env(safe-area-inset-bottom) + 12px);background:linear-gradient(#0000,rgba(0,0,0,.85) 35%);display:flex;flex-direction:column;gap:10px;z-index:6}
+.ctrl{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ic{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:19px;backdrop-filter:blur(6px)}
+.ic.on{background:var(--acc);color:#111}
+#recBtn{width:74px;height:74px;border-radius:50%;border:4px solid #fff;background:transparent;display:flex;align-items:center;justify-content:center}
+#recBtn span{width:56px;height:56px;border-radius:50%;background:#ff3b30;transition:.2s}
+#recBtn.on span{width:28px;height:28px;border-radius:7px}
+.sl{display:flex;align-items:center;gap:10px;font-size:13px;color:#ddd}
+.sl label{width:62px}
+.sl input{flex:1;accent-color:var(--acc)}
+.sl output{width:34px;text-align:right;font-variant-numeric:tabular-nums}
+#panel{display:flex;flex-direction:column;gap:8px}
+
+/* ===== Review ===== */
+#review{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;z-index:20}
+#review video{flex:1;width:100%;min-height:0;background:#000}
+#review .acts{display:flex;gap:10px;padding:12px 12px calc(env(safe-area-inset-bottom) + 12px)}
+#review .acts button,#review .acts a{flex:1;padding:14px;border-radius:12px;background:#222;text-align:center;font-weight:600;text-decoration:none;color:#fff}
+#review .acts .pri{background:var(--acc);color:#111}
+#err{position:fixed;left:12px;right:12px;bottom:20px;background:#3a1414;color:#fff;padding:12px;border-radius:12px;font-size:14px;z-index:50}
+</style>
+</head>
+<body>
+
+<!-- EDITOR -->
+<section id="editor">
+  <h1>Bunker <b>Prompter</b></h1>
+  <textarea id="script" placeholder="Pega o escribe tu guion aquí…"></textarea>
+  <div class="meta" id="stats">0 palabras · ~0:00</div>
+  <div class="row">
+    <div class="seg" id="fmt">
+      <button data-v="9:16" class="on">9:16 Vertical</button>
+      <button data-v="16:9">16:9</button>
+      <button data-v="1:1">1:1</button>
+    </div>
+    <div class="seg" id="facing">
+      <button data-v="user" class="on">Frontal</button>
+      <button data-v="environment">Trasera</button>
+    </div>
+  </div>
+  <button class="go" id="start">🎬 Abrir cámara</button>
+  <div class="meta">Tip: el texto va arriba, pegado a la cámara, para que tus ojos no se vayan. Toca la pantalla para pausar/seguir el texto. El video se graba SIN el texto.</div>
+</section>
+
+<!-- STUDIO -->
+<section id="studio" class="hidden">
+  <video id="cam" playsinline autoplay muted></video>
+  <div id="frame"></div>
+  <div id="prompt" class="bg"><div id="text"></div><div id="guide"></div></div>
+  <div id="count" class="hidden"></div>
+  <div id="rec" class="hidden"><i></i><span id="clock">0:00</span></div>
+
+  <div id="bar">
+    <div id="panel" class="hidden">
+      <div class="sl"><label>Velocidad</label><input id="speed" type="range" min="1" max="20" value="6"><output id="speedO">6</output></div>
+      <div class="sl"><label>Letra</label><input id="size" type="range" min="18" max="90" value="38"><output id="sizeO">38</output></div>
+      <div class="sl"><label>Alto texto</label><input id="height" type="range" min="20" max="80" value="40"><output id="heightO">40</output></div>
+      <div class="sl"><label>Ancho</label><input id="width" type="range" min="40" max="100" value="100"><output id="widthO">100</output></div>
+      <div class="row">
+        <button class="ic" id="mirrorText" title="Invertir texto (para cristal de teleprompter)">⇋</button>
+        <button class="ic on" id="bgBtn" title="Fondo oscuro tras el texto">▦</button>
+        <button class="ic on" id="mirrorCam" title="Espejo de cámara">🪞</button>
+        <button class="ic" id="restartBtn" title="Texto al inicio">⏮</button>
+      </div>
+    </div>
+    <div class="ctrl">
+      <button class="ic" id="back" title="Editar guion">✎</button>
+      <button class="ic" id="settings" title="Ajustes">⚙︎</button>
+      <button id="recBtn" title="Grabar"><span></span></button>
+      <button class="ic" id="playBtn" title="Pausa/Play texto">▶</button>
+      <button class="ic" id="flip" title="Cambiar cámara">⟲</button>
+    </div>
+  </div>
+</section>
+
+<!-- REVIEW -->
+<section id="review" class="hidden">
+  <video id="out" playsinline controls></video>
+  <div class="acts">
+    <button id="again">↺ Repetir</button>
+    <button id="share">Compartir</button>
+    <a id="dl" class="pri" download>⬇ Descargar</a>
+  </div>
+</section>
+
+<div id="err" class="hidden"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const LS='bprompter:';
+const st=JSON.parse(localStorage.getItem(LS+'cfg')||'{}');
+const cfg=Object.assign({fmt:'9:16',facing:'user',speed:6,size:38,height:40,width:100,mirrorText:false,bg:true,mirrorCam:true},st);
+const save=()=>localStorage.setItem(LS+'cfg',JSON.stringify(cfg));
+
+const script=$('#script');
+script.value=localStorage.getItem(LS+'script')||'';
+const stats=()=>{const w=(script.value.trim().match(/\S+/g)||[]).length,s=Math.round(w/150*60);
+  $('#stats').textContent=`${w} palabras · ~${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} a ritmo normal`};
+script.oninput=()=>{localStorage.setItem(LS+'script',script.value);stats()};stats();
+
+function seg(id,key){const el=$(id);el.querySelectorAll('button').forEach(b=>{b.classList.toggle('on',b.dataset.v===cfg[key]);
+  b.onclick=()=>{cfg[key]=b.dataset.v;save();el.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b))}})}
+seg('#fmt','fmt');seg('#facing','facing');
+
+function err(m){const e=$('#err');e.textContent=m;e.classList.remove('hidden');clearTimeout(err.t);err.t=setTimeout(()=>e.classList.add('hidden'),6000)}
+
+/* ---------- camera ---------- */
+let stream=null;
+async function openCam(){
+  if(stream)stream.getTracks().forEach(t=>t.stop());
+  const [a,b]=cfg.fmt.split(':').map(Number);
+  const portrait=a<b, sq=a===b;
+  const W=sq?1080:(portrait?1080:1920), H=sq?1080:(portrait?1920:1080);
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:cfg.facing,width:{ideal:W},height:{ideal:H},aspectRatio:{ideal:a/b},frameRate:{ideal:30}},
+      audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+  }catch(e){err('No pude abrir cámara/micrófono: '+e.message+'. Revisa permisos del navegador.');throw e}
+  const v=$('#cam');v.srcObject=stream;await v.play().catch(()=>{});
+  v.classList.toggle('mirror',cfg.mirrorCam&&cfg.facing==='user');
+  layoutFrame();
+}
+
+/* Frame mask shows the actual crop area of chosen format */
+function layoutFrame(){
+  const f=$('#frame');f.innerHTML='';
+  const [a,b]=cfg.fmt.split(':').map(Number);const W=innerWidth,H=innerHeight;
+  let fw=W,fh=W*b/a;if(fh>H){fh=H;fw=H*a/b}
+  const x=(W-fw)/2,y=(H-fh)/2;
+  [[0,0,W,y],[0,y+fh,W,H-y-fh],[0,y,x,fh],[x+fw,y,W-x-fw,fh]].forEach(([l,t,w,h])=>{if(w>1&&h>1){const m=document.createElement('div');m.className='mask';Object.assign(m.style,{left:l+'px',top:t+'px',width:w+'px',height:h+'px'});f.appendChild(m)}});
+}
+addEventListener('resize',()=>{if(!$('#studio').classList.contains('hidden')){layoutFrame();applyText()}});
+
+/* ---------- prompter ---------- */
+const text=$('#text'),prompt=$('#prompt');
+let pos=0,playing=false,last=0;
+function applyText(){
+  text.textContent=script.value||'Escribe tu guion primero ✎';
+  text.style.fontSize=cfg.size+'px';
+  text.style.width=cfg.width+'%';
+  prompt.style.height=cfg.height+'%';
+  prompt.classList.toggle('bg',cfg.bg);
+  $('#guide').style.top=(prompt.clientHeight*0.28)+'px';
+  render();
+}
+function render(){
+  const top=prompt.clientHeight*0.28;
+  const max=text.scrollHeight-top+20;if(pos>max){pos=max;setPlay(false)}
+  if(pos<0)pos=0;
+  text.style.transform=`translateY(${top-pos}px)`+(cfg.mirrorText?' scaleX(-1)':'');
+}
+function tick(t){
+  if(playing){const dt=Math.min(.1,(t-last)/1000);pos+=cfg.speed*cfg.size*0.09*dt*1.1;render()}
+  last=t;requestAnimationFrame(tick)}
+requestAnimationFrame(tick);
+function setPlay(p){playing=p;$('#playBtn').textContent=p?'❚❚':'▶';$('#playBtn').classList.toggle('on',p)}
+
+/* touch: tap = pause/play, drag = scroll manually */
+let dragY=null,moved=false;
+prompt.style.pointerEvents='auto';
+['#prompt','#cam','#frame'].forEach(s=>{const el=$(s);
+  el.addEventListener('pointerdown',e=>{dragY=e.clientY;moved=false});
+  el.addEventListener('pointermove',e=>{if(dragY==null)return;const d=e.clientY-dragY;if(Math.abs(d)>4)moved=true;if(moved){pos-=d;dragY=e.clientY;render()}});
+  el.addEventListener('pointerup',()=>{if(!moved)setPlay(!playing);dragY=null});
+});
+$('#cam').style.pointerEvents='auto';
+addEventListener('wheel',e=>{if($('#studio').classList.contains('hidden'))return;pos+=e.deltaY*.5;render()},{passive:true});
+addEventListener('keydown',e=>{if($('#studio').classList.contains('hidden'))return;
+  if(e.code==='Space'){e.preventDefault();setPlay(!playing)}
+  if(e.code==='ArrowUp'){cfg.speed=Math.min(20,cfg.speed+1);syncSl()}
+  if(e.code==='ArrowDown'){cfg.speed=Math.max(1,cfg.speed-1);syncSl()}
+  if(e.code==='KeyR')toggleRec();
+});
+
+/* sliders */
+function bindSl(k){const i=$('#'+k),o=$('#'+k+'O');i.value=cfg[k];o.textContent=cfg[k];
+  i.oninput=()=>{cfg[k]=+i.value;o.textContent=i.value;save();applyText()}}
+['speed','size','height','width'].forEach(bindSl);
+function syncSl(){['speed','size','height','width'].forEach(k=>{$('#'+k).value=cfg[k];$('#'+k+'O').textContent=cfg[k]});save()}
+function tog(id,k,fn){const b=$(id);b.classList.toggle('on',cfg[k]);b.onclick=()=>{cfg[k]=!cfg[k];b.classList.toggle('on',cfg[k]);save();fn&&fn()}}
+tog('#mirrorText','mirrorText',applyText);tog('#bgBtn','bg',applyText);
+tog('#mirrorCam','mirrorCam',()=>$('#cam').classList.toggle('mirror',cfg.mirrorCam&&cfg.facing==='user'));
+$('#restartBtn').onclick=()=>{pos=0;render()};
+$('#settings').onclick=()=>{$('#panel').classList.toggle('hidden');$('#settings').classList.toggle('on')};
+$('#playBtn').onclick=()=>setPlay(!playing);
+
+/* ---------- recording ---------- */
+let rec=null,chunks=[],t0=0,clockI=null,blobUrl=null,lastBlob=null,mime='';
+function pickMime(){
+  const c=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  return c.find(m=>window.MediaRecorder&&MediaRecorder.isTypeSupported(m))||'';
+}
+/* record cropped to chosen format via canvas only if camera aspect differs */
+function recStream(){
+  const v=$('#cam'),[a,b]=cfg.fmt.split(':').map(Number);
+  const vw=v.videoWidth,vh=v.videoHeight;
+  recStream.draw=null;
+  if(!vw||Math.abs(vw/vh-a/b)<0.02)return stream;
+  let cw,ch;if(vw/vh>a/b){ch=vh;cw=Math.round(vh*a/b)}else{cw=vw;ch=Math.round(vw*b/a)}
+  cw-=cw%2;ch-=ch%2;
+  const c=document.createElement('canvas');c.width=cw;c.height=ch;const x=c.getContext('2d');
+  const sx=(vw-cw)/2,sy=(vh-ch)/2;
+  const out=c.captureStream(30);stream.getAudioTracks().forEach(t=>out.addTrack(t));
+  recStream.draw=()=>{const d=()=>{if(!rec||rec.state==='inactive')return;x.drawImage(v,sx,sy,cw,ch,0,0,cw,ch);requestAnimationFrame(d)};d()};
+  return out;
+}
+async function countdown(){const c=$('#count');c.classList.remove('hidden');
+  for(const n of [3,2,1]){c.textContent=n;await new Promise(r=>setTimeout(r,800))}c.classList.add('hidden')}
+async function toggleRec(){
+  if(rec&&rec.state==='recording'){rec.stop();return}
+  if(!window.MediaRecorder){err('Este navegador no puede grabar. Usa Chrome o Safari actualizado.');return}
+  mime=pickMime();
+  await countdown();
+  chunks=[];const s=recStream();
+  try{rec=new MediaRecorder(s,mime?{mimeType:mime,videoBitsPerSecond:8e6}:{})}catch(e){rec=new MediaRecorder(s)}
+  rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);
+  rec.onstop=finish;
+  rec.start(1000);if(recStream.draw&&s!==stream)recStream.draw();
+  $('#recBtn').classList.add('on');$('#rec').classList.remove('hidden');
+  t0=Date.now();clockI=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);$('#clock').textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`},250);
+  setPlay(true);
+}
+$('#recBtn').onclick=toggleRec;
+function finish(){
+  clearInterval(clockI);setPlay(false);$('#recBtn').classList.remove('on');$('#rec').classList.add('hidden');
+  const type=(rec.mimeType||mime||'video/webm').split(';')[0];
+  lastBlob=new Blob(chunks,{type});if(blobUrl)URL.revokeObjectURL(blobUrl);blobUrl=URL.createObjectURL(lastBlob);
+  const ext=type.includes('mp4')?'mp4':'webm';
+  const name=`prompter-${new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')}.${ext}`;
+  $('#out').src=blobUrl;$('#dl').href=blobUrl;$('#dl').download=name;lastBlob.name=name;
+  $('#review').classList.remove('hidden');
+}
+$('#again').onclick=()=>{$('#out').pause();$('#review').classList.add('hidden');pos=0;render()};
+$('#share').onclick=async()=>{
+  try{const f=new File([lastBlob],lastBlob.name,{type:lastBlob.type});
+    if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f]});
+    else err('Compartir no disponible aquí: usa Descargar.')}catch(e){}
+};
+
+/* ---------- nav ---------- */
+let wake=null;
+$('#start').onclick=async()=>{
+  $('#editor').classList.add('hidden');$('#studio').classList.remove('hidden');
+  try{await openCam()}catch(e){$('#studio').classList.add('hidden');$('#editor').classList.remove('hidden');return}
+  pos=0;applyText();setPlay(false);
+  try{wake=await navigator.wakeLock?.request('screen')}catch(e){}
+};
+$('#back').onclick=()=>{
+  if(rec&&rec.state==='recording')return err('Detén la grabación primero.');
+  setPlay(false);stream&&stream.getTracks().forEach(t=>t.stop());stream=null;wake?.release?.();
+  $('#studio').classList.add('hidden');$('#editor').classList.remove('hidden');
+};
+$('#flip').onclick=async()=>{
+  if(rec&&rec.state==='recording')return;
+  cfg.facing=cfg.facing==='user'?'environment':'user';save();seg('#facing','facing');await openCam();
+};
+document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'&&stream){try{wake=await navigator.wakeLock?.request('screen')}catch(e){}}});
+</script>
+</body>
+</html>
